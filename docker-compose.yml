@@ -26,25 +26,25 @@ services:
       db:
         condition: service_healthy
 
-  pyramid:
-    build: ./pyramid
-    environment:
-      DATABASE_URL: postgresql+psycopg2://app:app@db:5432/appdb
-    ports:
-      - "6543:6543"
-    depends_on:
-      db:
-        condition: service_healthy
+  # pyramid:
+  #   build: ./pyramid
+  #   environment:
+  #     DATABASE_URL: postgresql+psycopg2://app:app@db:5432/appdb
+  #   ports:
+  #     - "6543:6543"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
 
-  base:
-    build: ./base
-    environment:
-      DATABASE_URL: postgresql+psycopg2://app:app@db:5432/appdb
-    ports:
-      - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
+  # base:
+  #   build: ./base
+  #   environment:
+  #     DATABASE_URL: postgresql+psycopg2://app:app@db:5432/appdb
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
 
 volumes:
   pgdata:
