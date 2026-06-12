@@ -1,0 +1,69 @@
+# The fastapi-auth Secret (SESSION_SECRET, GOOGLE_CLIENT_ID,
+# GOOGLE_CLIENT_SECRET) is intentionally not in this manifest: dev-up.sh
+# creates it from the untracked .env at the repo root. The app hides the
+# Google sign-in button while the google values are empty.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    metadata:
+      labels:
+        app: fastapi
+    spec:
+      containers:
+        - name: fastapi
+          # Bare image name on purpose: overlays map it to the real registry
+          # (kind-loaded locally, ghcr.io in a future prod overlay).
+          image: frameworks-fastapi:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_URL
+            # Origin registered with Google for the OAuth callback; a prod
+            # overlay patches this to the real https domain.
+            - name: GOOGLE_AUTH_ORIGIN
+              value: http://localhost
+          envFrom:
+            - secretRef:
+                name: fastapi-auth
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi
+spec:
+  selector:
+    app: fastapi
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000

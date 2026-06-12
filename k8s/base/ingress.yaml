@@ -1,0 +1,51 @@
+# *.localtest.me resolves to 127.0.0.1 via public DNS — no /etc/hosts edits.
+# A prod overlay would patch these hosts to a real domain.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frameworks
+spec:
+  ingressClassName: nginx
+  rules:
+    # Google OAuth only allows plain-http redirect URIs on localhost, so the
+    # fastapi app is also reachable at http://localhost/ for the SSO flow.
+    - host: localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi
+                port:
+                  name: http
+    - host: fastapi.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi
+                port:
+                  name: http
+    - host: pyramid.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pyramid
+                port:
+                  name: http
+    - host: base.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: base
+                port:
+                  name: http
