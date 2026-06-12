@@ -2,7 +2,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Pod Dashboard</title>
+<title>Pod Dashboard Demo</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
   fieldset { margin-bottom: 1rem; }
