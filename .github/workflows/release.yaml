@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [fastapi, pyramid, base]
+        app: [fastapi]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
