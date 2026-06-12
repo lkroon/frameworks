@@ -10,9 +10,16 @@ INDEX_HTML = """<!DOCTYPE html>
   input, select, button { margin: 0.25rem 0; padding: 0.3rem; }
   #output { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; word-break: break-word; }
   .row { margin: 0.25rem 0; }
+  .topbar { display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #ddd; padding-bottom: 0.5rem; }
+  .topbar form { margin: 0; }
 </style>
 </head>
 <body>
+<div class="topbar">
+  <span>Signed in as <strong>__ACCOUNT_NAME__</strong></span>
+  <form method="post" action="/logout"><button type="submit">Log out</button></form>
+</div>
 <h1>Users Admin</h1>
 
 <fieldset>
@@ -131,6 +138,70 @@ async function deleteUser() {
 
 loadUsers();
 </script>
+</body>
+</html>
+"""
+
+_AUTH_STYLE = """
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 360px; margin: 4rem auto; padding: 0 1rem; }
+  label { display: block; margin-top: 0.75rem; }
+  input { width: 100%; padding: 0.4rem; box-sizing: border-box; }
+  button { margin-top: 1rem; padding: 0.4rem 1rem; }
+  .error { color: #b00020; background: #fde7e9; padding: 0.5rem; }
+  .google { display: inline-block; margin-top: 1rem; padding: 0.4rem 1rem;
+            border: 1px solid #ccc; text-decoration: none; color: inherit; }
+  hr { margin: 1.5rem 0; border: 0; border-top: 1px solid #ddd; }
+</style>
+"""
+
+GOOGLE_BUTTON_HTML = """<hr>
+<a class="google" href="__GOOGLE_AUTH_URL__">Sign in with Google</a>"""
+
+LOGIN_HTML = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign in</title>
+{_AUTH_STYLE}
+</head>
+<body>
+<h1>Sign in</h1>
+__ERROR__
+<form method="post" action="/login">
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" required>
+  <button type="submit">Sign in</button>
+</form>
+__GOOGLE__
+<p>No account? <a href="/register">Register</a></p>
+</body>
+</html>
+"""
+
+REGISTER_HTML = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Register</title>
+{_AUTH_STYLE}
+</head>
+<body>
+<h1>Register</h1>
+__ERROR__
+<form method="post" action="/register">
+  <label for="display_name">Name</label>
+  <input id="display_name" name="display_name">
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" required>
+  <button type="submit">Create account</button>
+</form>
+__GOOGLE__
+<p>Already have an account? <a href="/login">Sign in</a></p>
 </body>
 </html>
 """
