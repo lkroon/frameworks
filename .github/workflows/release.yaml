@@ -1,0 +1,50 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [fastapi, pyramid, base]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.app }}
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/frameworks-${{ matrix.app }}:${{ github.ref_name }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  bump-chart:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/charts
+          # Fine-grained PAT with contents:read+write on the charts repo;
+          # the default GITHUB_TOKEN cannot push to other repositories
+          token: ${{ secrets.CHARTS_REPO_TOKEN }}
+      - name: bump imageTag and push
+        run: |
+          sed -i "s/^imageTag:.*/imageTag: ${GITHUB_REF_NAME}/" frameworks/values.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${GITHUB_REF_NAME}\"/" frameworks/Chart.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet && { echo "tag already current"; exit 0; }
+          git commit -am "frameworks ${GITHUB_REF_NAME}"
+          git push
