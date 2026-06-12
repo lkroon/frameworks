@@ -22,6 +22,19 @@ host ports 80/443 in `kind-config.yaml`.)
 
 Tear down with `kind delete cluster --name frameworks`.
 
+## Platform demos (fastapi dashboard)
+
+The fastapi app serves a pod dashboard at `/` (login required) built for two
+experiments:
+
+- **Load balancing**: `kubectl -n frameworks scale deploy/fastapi
+  --replicas=4`, then use "Send 30 requests" to watch responses spread
+  across pods (identity comes from the Downward API).
+- **Autoscaling**: "Start load" hammers `/work` (CPU burner). metrics-server
+  feeds a `HorizontalPodAutoscaler` (1–5 replicas, 60% CPU target); watch
+  with `kubectl -n frameworks get hpa,pods -w`. Scale-down begins ~1 min
+  after load stops.
+
 ## Layout
 
 ```

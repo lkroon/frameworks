@@ -1,18 +1,20 @@
-INDEX_HTML = """<!DOCTYPE html>
+DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Users Admin</title>
+<title>Pod Dashboard</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
   fieldset { margin-bottom: 1rem; }
-  label { display: inline-block; min-width: 4rem; }
-  input, select, button { margin: 0.25rem 0; padding: 0.3rem; }
-  #output { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; word-break: break-word; }
-  .row { margin: 0.25rem 0; }
+  button { margin: 0.25rem 0; padding: 0.3rem 0.8rem; }
+  pre { background: #f4f4f4; padding: 1rem; }
+  code { background: #f4f4f4; padding: 0.1rem 0.3rem; }
   .topbar { display: flex; justify-content: space-between; align-items: center;
             border-bottom: 1px solid #ddd; padding-bottom: 0.5rem; }
   .topbar form { margin: 0; }
+  .bar { background: #4a90d9; color: #fff; padding: 2px 8px; margin: 2px 0;
+         white-space: nowrap; font-size: 0.85rem; }
+  .hint { color: #666; font-size: 0.9rem; }
 </style>
 </head>
 <body>
@@ -20,123 +22,122 @@ INDEX_HTML = """<!DOCTYPE html>
   <span>Signed in as <strong>__ACCOUNT_NAME__</strong></span>
   <form method="post" action="/logout"><button type="submit">Log out</button></form>
 </div>
-<h1>Users Admin</h1>
+<h1>Pod Dashboard</h1>
 
 <fieldset>
-  <legend>All users</legend>
-  <button onclick="location.href='/users'">View all users (raw JSON)</button>
-  <button onclick="loadUsers()">Refresh dropdown</button>
-</fieldset>
-
-<fieldset>
-  <legend>Create user</legend>
-  <div class="row"><label for="c_name">Name</label><input id="c_name"></div>
-  <div class="row"><label for="c_email">Email</label><input id="c_email"></div>
-  <button onclick="createUser()">Create</button>
+  <legend>This response served by</legend>
+  <pre id="me">loading…</pre>
+  <button onclick="loadMe()">Refresh</button>
 </fieldset>
 
 <fieldset>
-  <legend>Select a user</legend>
-  <select id="userSelect"></select>
-  <div class="row">
-    <button onclick="viewUser()">View (A)</button>
-    <button onclick="showUpdate()">Update (B)</button>
-    <button onclick="deleteUser()">Delete (C)</button>
-  </div>
+  <legend>Replicas</legend>
+  <input type="range" id="replicaSlider" min="1" max="5" step="1" value="1"
+         oninput="document.getElementById('replicaVal').textContent = this.value"
+         onchange="setReplicas(this.value)">
+  <strong id="replicaVal">?</strong>
+  <span id="scaleStatus" class="hint"></span>
+  <p class="hint">Patches the deployment's scale subresource through the
+  Kubernetes API (pod ServiceAccount, RBAC-scoped to exactly this). Note the
+  HPA also manages this deployment &mdash; when idle it pulls the count back
+  to its own target within a minute or two.</p>
 </fieldset>
 
-<fieldset id="updateBox" style="display:none">
-  <legend>Update user <span id="u_id"></span></legend>
-  <div class="row"><label for="u_name">Name</label><input id="u_name"></div>
-  <div class="row"><label for="u_email">Email</label><input id="u_email"></div>
-  <button onclick="submitUpdate()">Save</button>
-  <button onclick="document.getElementById('updateBox').style.display='none'">Cancel</button>
+<fieldset>
+  <legend>Load balancing</legend>
+  <p class="hint">Each request may land on a different pod. Raise the
+  replica count above and try again.</p>
+  <button onclick="ping(30)">Send 30 requests</button>
+  <div id="pingTally"></div>
 </fieldset>
 
-<h3>Output</h3>
-<pre id="output">Ready.</pre>
+<fieldset>
+  <legend>CPU load (autoscaler demo)</legend>
+  <p class="hint">Runs 6 parallel loops against <code>/work</code>, each request burning
+  300&nbsp;ms of CPU. Watch the HPA react:
+  <code>kubectl -n frameworks get hpa,pods -w</code></p>
+  <button id="loadBtn" onclick="toggleLoad()">Start load</button>
+  <span id="loadStats"></span>
+  <div id="loadTally"></div>
+</fieldset>
 
 <script>
-const out = document.getElementById('output');
-const sel = document.getElementById('userSelect');
-
-function show(data, status) {
-  out.textContent = (status ? `[${status}] ` : '') +
-    (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+async function whoami() {
+  const r = await fetch('/whoami', {cache: 'no-store'});
+  return r.json();
 }
 
-async function loadUsers() {
-  const r = await fetch('/users');
-  const users = await r.json();
-  sel.innerHTML = '';
-  if (users.length === 0) {
-    const o = document.createElement('option');
-    o.value = ''; o.textContent = '(no users)';
-    sel.appendChild(o);
-  }
-  for (const u of users) {
-    const o = document.createElement('option');
-    o.value = u.id;
-    o.textContent = `${u.id} - ${u.name} (${u.email})`;
-    sel.appendChild(o);
-  }
-  show(users, r.status);
+async function loadMe() {
+  document.getElementById('me').textContent = JSON.stringify(await whoami(), null, 2);
 }
 
-async function createUser() {
-  const name = document.getElementById('c_name').value;
-  const email = document.getElementById('c_email').value;
-  const r = await fetch('/users', {
+function renderTally(el, counts) {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+  el.innerHTML = Object.entries(counts).sort()
+    .map(([pod, n]) =>
+      `<div class="bar" style="width:${Math.round(300 * n / total) + 80}px">${pod}: ${n}</div>`)
+    .join('');
+}
+
+async function ping(n) {
+  const counts = {};
+  for (let i = 0; i < n; i++) {
+    const j = await whoami();
+    counts[j.pod] = (counts[j.pod] || 0) + 1;
+    renderTally(document.getElementById('pingTally'), counts);
+  }
+}
+
+let running = false, done = 0;
+const loadCounts = {};
+
+async function workLoop() {
+  while (running) {
+    try {
+      const r = await fetch('/work?ms=300', {cache: 'no-store'});
+      const j = await r.json();
+      loadCounts[j.pod] = (loadCounts[j.pod] || 0) + 1;
+      done++;
+      document.getElementById('loadStats').textContent = ` ${done} requests completed`;
+      renderTally(document.getElementById('loadTally'), loadCounts);
+    } catch (e) { /* pod may be cycling during scale events; keep going */ }
+  }
+}
+
+function toggleLoad() {
+  running = !running;
+  document.getElementById('loadBtn').textContent = running ? 'Stop load' : 'Start load';
+  if (running) for (let i = 0; i < 6; i++) workLoop();
+}
+
+async function refreshScale() {
+  try {
+    const r = await fetch('/scale', {cache: 'no-store'});
+    if (!r.ok) return;
+    const s = await r.json();
+    document.getElementById('scaleStatus').textContent =
+      ` desired: ${s.desired}, running: ${s.running}`;
+    const slider = document.getElementById('replicaSlider');
+    // Keep the slider honest (HPA may change replicas) unless being dragged
+    if (document.activeElement !== slider) {
+      slider.value = s.desired;
+      document.getElementById('replicaVal').textContent = s.desired;
+    }
+  } catch (e) { /* transient during pod cycling */ }
+}
+
+async function setReplicas(n) {
+  await fetch('/scale', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({name, email})
+    body: JSON.stringify({replicas: Number(n)})
   });
-  show(await r.json(), r.status);
-  document.getElementById('c_name').value = '';
-  document.getElementById('c_email').value = '';
-  loadUsers();
+  refreshScale();
 }
 
-async function viewUser() {
-  if (!sel.value) return show('No user selected.');
-  const r = await fetch('/users/' + sel.value);
-  show(await r.json(), r.status);
-}
-
-async function showUpdate() {
-  if (!sel.value) return show('No user selected.');
-  const r = await fetch('/users/' + sel.value);
-  const u = await r.json();
-  document.getElementById('u_id').textContent = u.id;
-  document.getElementById('u_name').value = u.name;
-  document.getElementById('u_email').value = u.email;
-  document.getElementById('updateBox').dataset.id = u.id;
-  document.getElementById('updateBox').style.display = 'block';
-}
-
-async function submitUpdate() {
-  const id = document.getElementById('updateBox').dataset.id;
-  const name = document.getElementById('u_name').value;
-  const email = document.getElementById('u_email').value;
-  const r = await fetch('/users/' + id, {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({name, email})
-  });
-  show(await r.json(), r.status);
-  document.getElementById('updateBox').style.display = 'none';
-  loadUsers();
-}
-
-async function deleteUser() {
-  if (!sel.value) return show('No user selected.');
-  const id = sel.value;
-  const r = await fetch('/users/' + id, {method: 'DELETE'});
-  show(r.status === 204 ? `Deleted user ${id}` : `Status ${r.status}`, r.status);
-  loadUsers();
-}
-
-loadUsers();
+loadMe();
+refreshScale();
+setInterval(refreshScale, 3000);
 </script>
 </body>
 </html>

@@ -20,6 +20,14 @@ kubectl --context "kind-$CLUSTER" wait -n ingress-nginx \
   --selector=app.kubernetes.io/component=controller \
   --timeout=180s
 
+# metrics-server feeds the HPA; kind kubelets use self-signed certs
+kubectl --context "kind-$CLUSTER" get deploy -n kube-system metrics-server >/dev/null 2>&1 || {
+  kubectl --context "kind-$CLUSTER" apply -f \
+    https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+  kubectl --context "kind-$CLUSTER" -n kube-system patch deploy metrics-server --type=json \
+    -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+}
+
 for app in fastapi pyramid base; do
   docker build -t "frameworks-$app:dev" "./$app"
 done

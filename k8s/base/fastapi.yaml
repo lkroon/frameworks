@@ -16,6 +16,7 @@ spec:
       labels:
         app: fastapi
     spec:
+      serviceAccountName: fastapi
       containers:
         - name: fastapi
           # Bare image name on purpose: overlays map it to the real registry
@@ -34,6 +35,23 @@ spec:
             # overlay patches this to the real https domain.
             - name: GOOGLE_AUTH_ORIGIN
               value: http://localhost
+            # Downward API: pod identity for the dashboard
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           envFrom:
             - secretRef:
                 name: fastapi-auth
@@ -51,9 +69,12 @@ spec:
             periodSeconds: 15
           resources:
             requests:
-              cpu: 50m
+              # The HPA targets 60% of this request; the cpu limit caps how
+              # hard one pod can burn so load spreads instead of saturating
+              cpu: 100m
               memory: 128Mi
             limits:
+              cpu: 500m
               memory: 256Mi
 ---
 apiVersion: v1
