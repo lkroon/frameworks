@@ -1,72 +1,53 @@
-# Kubernetes deployment
+# Kubernetes (local cluster bootstrap)
 
-Runs the frameworks stack (Postgres + fastapi/pyramid/base apps) on a local
-[kind](https://kind.sigs.k8s.io/) cluster with nginx ingress.
+The apps in this repo are deployed by **Argo CD** from the Helm chart in
+[lkroon/charts](https://github.com/lkroon/charts) — manifests no longer live
+here. This directory only bootstraps the local
+[kind](https://kind.sigs.k8s.io/) cluster that Argo CD runs in.
 
-## Quick start
+## The GitOps loop
+
+1. Commit and push code changes, then tag: `git tag v0.x.y && git push origin main v0.x.y`
+2. GitHub Actions (`.github/workflows/release.yaml`) builds the three images
+   to `ghcr.io/lkroon/frameworks-<app>:v0.x.y` and commits the new
+   `imageTag` to the charts repo (needs the `CHARTS_REPO_TOKEN` secret).
+3. Argo CD notices the charts commit and syncs the cluster (~3 min poll).
+
+Nothing is built or applied from this machine. For quick local iteration
+without the cluster, use `docker compose up` at the repo root.
+
+## Bootstrap
 
 ```sh
-./k8s/dev-up.sh
+./k8s/cluster-up.sh
 ```
 
-Creates the cluster if needed, installs ingress-nginx, builds and loads the
-app images, and applies the manifests. Re-run it after code changes to
-rebuild and redeploy. Then:
+Idempotent. Creates the kind cluster (`k8s/kind-config.yaml`: host ports
+80/443 → ingress) and installs ingress-nginx, metrics-server, Argo CD, and
+the `fastapi-auth` Secret from the untracked `.env` (keys `SESSION_SECRET`,
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, values unquoted), then applies
+the Argo CD Application. Argo CD does the rest.
 
-- http://fastapi.localtest.me/
-- http://pyramid.localtest.me/
-- http://base.localtest.me/
+- apps: http://fastapi.localtest.me/ — http://pyramid.localtest.me/ —
+  http://base.localtest.me/ — fastapi also at http://localhost/ (Google SSO)
+- Argo CD UI: http://argocd.localtest.me/ (user `admin`, password printed by
+  the script)
 
-(`*.localtest.me` resolves to 127.0.0.1 via public DNS; ingress is mapped to
-host ports 80/443 in `kind-config.yaml`.)
+Tear down with `kind delete cluster --name frameworks` — this deletes the
+Postgres volume too; the bootstrap restores the platform, not the data.
 
-Tear down with `kind delete cluster --name frameworks`.
+After editing `.env`, refresh the secret with:
+`kubectl -n frameworks create secret generic fastapi-auth --from-env-file=.env --dry-run=client -o yaml | kubectl apply -f -`
+then `kubectl -n frameworks rollout restart deploy fastapi`.
 
-## Platform demos (fastapi dashboard)
+## Notes
 
-The fastapi app serves a pod dashboard at `/` (login required) built for two
-experiments:
-
-- **Load balancing**: `kubectl -n frameworks scale deploy/fastapi
-  --replicas=4`, then use "Send 30 requests" to watch responses spread
-  across pods (identity comes from the Downward API).
-- **Autoscaling**: "Start load" hammers `/work` (CPU burner). metrics-server
-  feeds a `HorizontalPodAutoscaler` (1–5 replicas, 60% CPU target); watch
-  with `kubectl -n frameworks get hpa,pods -w`. Scale-down begins ~1 min
-  after load stops.
-
-## Layout
-
-```
-k8s/
-├── kind-config.yaml     # cluster definition (ingress-ready node, port 80/443 mappings)
-├── dev-up.sh            # idempotent bootstrap/redeploy script
-├── base/                # kustomize base: namespace, postgres, apps, ingress
-│   └── schema.sql       # copy of ../database/schema.sql (kustomize can't leave its root)
-└── overlays/
-    └── local/           # what dev-up.sh applies; prod overlay slots in beside it
-```
-
-Notes:
-
-- App images use bare names (`frameworks-fastapi:dev`) loaded into kind with
-  `kind load docker-image`. A prod overlay would remap them to
-  `ghcr.io/<owner>/frameworks-<app>:<tag>` via the kustomize `images:`
-  transformer — that is the Argo CD integration point.
-- `db-credentials` contains dev-only plaintext values. For a real
-  deployment, replace with sealed-secrets or SOPS.
-- The `fastapi-auth` Secret is not in the manifests: `dev-up.sh` creates it
-  from the gitignored `.env` at the repo root (keys: `SESSION_SECRET`,
-  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`). To apply `.env` changes
-  without a full dev-up run:
-  `kubectl -n frameworks create secret generic fastapi-auth --from-env-file=.env --dry-run=client -o yaml | kubectl apply -f -`
-  followed by `kubectl -n frameworks rollout restart deploy fastapi`.
-- "Sign in with Google" uses an OAuth client (web application) from Google
-  Cloud Console with redirect URI `http://localhost/auth/google/callback`.
-  The SSO flow always runs on http://localhost/ (Google only allows
-  plain-http redirects on localhost), which is why the ingress also routes
-  that host to fastapi and the SSO button links there absolutely via
-  `GOOGLE_AUTH_ORIGIN`.
-- If you edit `database/schema.sql`, copy it to `k8s/base/schema.sql` too.
-  The init script only runs on a fresh data volume; an existing database
-  needs a migration (or delete the `pgdata` PVC to start over).
+- Argo CD has self-heal enabled: anything applied by hand to the
+  `frameworks` namespace that conflicts with the chart gets reverted within
+  minutes. To test unreleased code in-cluster, pause auto-sync on the
+  Application in the Argo CD UI first (or just cut a pre-release tag).
+- The platform demos (pod dashboard, replica slider, HPA load test) are
+  documented in the chart repo; HPA scale-down starts ~1 min after load
+  stops.
+- The original kustomize manifests and `dev-up.sh` live in git history
+  (removed when Argo CD took over).

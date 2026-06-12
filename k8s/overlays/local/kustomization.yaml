@@ -1,9 +1,0 @@
-# Local kind cluster. Images are built locally and loaded with
-# `kind load docker-image`; the :dev tags in base match those loads.
-# A future overlays/prod would use the `images:` transformer to point the
-# same base at ghcr.io/<owner>/frameworks-<app>:<tag> for Argo CD.
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-resources:
-  - ../../base
