@@ -41,10 +41,14 @@ jobs:
           token: ${{ secrets.CHARTS_REPO_TOKEN }}
       - name: bump imageTag and push
         run: |
-          sed -i "s/^imageTag:.*/imageTag: ${GITHUB_REF_NAME}/" frameworks/values.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${GITHUB_REF_NAME}\"/" frameworks/Chart.yaml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          sed -i "s/^imageTag:.*/imageTag: ${GITHUB_REF_NAME}/" frameworks/values.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${GITHUB_REF_NAME}\"/" frameworks/Chart.yaml
           git diff --quiet && { echo "tag already current"; exit 0; }
           git commit -am "frameworks ${GITHUB_REF_NAME}"
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "$(git rev-parse --abbrev-ref HEAD)" && git push && exit 0
+            echo "push raced, retrying ($i)"; sleep $((RANDOM % 5 + 1))
+          done
+          echo "failed to push after retries"; exit 1
