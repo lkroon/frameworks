@@ -22,7 +22,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <span>Signed in as <strong>__ACCOUNT_NAME__</strong></span>
   <form method="post" action="/logout"><button type="submit">Log out</button></form>
 </div>
-<h1>Pod Dashboard</h1>
+<h1>Pod Dashboard Demo</h1>
 
 <fieldset>
   <legend>This response served by</legend>
